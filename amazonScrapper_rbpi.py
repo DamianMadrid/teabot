@@ -1,19 +1,18 @@
 import requests
+import requests_random_user_agent
 import time
 from datetime import  datetime
 from bs4 import BeautifulSoup
 
 BASE_URL = "https://www.amazon.com.mx"
 
-
-
-def scrapWhishlistUrls(whishlist_url: str, hdrs: dict ):
+def scrapWhishlistUrls(whishlist_url: str):
     current_session = requests.session()
-    current_session.headers = hdrs
     urls = set()
     failed_attempts_left = 10
     while(True):
         if failed_attempts_left == 0:
+            print(whishlist_url)
             print(f"[{datetime.now()}] Error req/res")
             return set()
         if whishlist_url == None:
@@ -24,12 +23,14 @@ def scrapWhishlistUrls(whishlist_url: str, hdrs: dict ):
             whishlist = soup.find(id="g-items")
             if whishlist != None:
                 for prod in whishlist.find_all("li"):
+
                     left_panel = prod.find(
                         "div", {"class": "a-fixed-left-grid-inner"})
-                    left_panel = left_panel.find(
-                        "div", {"class": "a-fixed-left-grid-inner"})
-                    prod_url = left_panel.find("a", {"class": "a-link-normal"})
-                    urls.add(prod_url['href'].split("&")[0])
+                    if left_panel:
+                        left_panel = left_panel.find(
+                            "div", {"class": "a-fixed-left-grid-inner"})
+                        prod_url = left_panel.find("a", {"class": "a-link-normal"})
+                        urls.add(prod_url['href'].split("&")[0])
                 whishlist_url = _nextWhishlistSegment(soup)
             else:
                 failed_attempts_left -= 1
@@ -46,14 +47,19 @@ def _nextWhishlistSegment(soup:BeautifulSoup):
             return  next_seg
         else:
             print(f"[{datetime.now()}] Couldnt find next segment of whishlist")
-    
-    
 
-    
-def scrapeProdPage(prod_url: str, hdrs: dict)->dict:
-    req = requests.get(prod_url, headers=hdrs)
+def scrapeProdPage(prod_url: str,session:requests.Session)->dict:
+    req = session.get(prod_url)
+    err_out = open("err_.html","wb")
+    err_out.write(req.content)
+
     if req.status_code == 200:
         soup = BeautifulSoup(req.text, "html.parser")
+        name_span = soup.find("span", {"id": "productTitle"})
+        if not name_span:
+            print(f"[{datetime.now()}] Expired link ({prod_url})")
+            return {"error":"Expired link"}
+        name = str(name_span.text).strip()
         price_box = soup.find("div", {"class": "a-box-group"})
         if price_box:
             try:
@@ -63,17 +69,21 @@ def scrapeProdPage(prod_url: str, hdrs: dict)->dict:
                     price_span =div_core.find("span",{"class":"a-offscreen"})
                 price = str(price_span.text).replace("$", "")
                 price = price.replace(",", "")
-                name_span = soup.find("span", {"id": "productTitle"})
-                name = str(name_span.text)
+                return {"name":name,"price":float(price)}
+            except Exception as e:
+                print(e.args)
+                print(f"[{datetime.now()}] Not availble ({prod_url})")
+                return {"error":"Not available"}
+        else:
+            try:
+                price_span = soup.find("span", {"class": "a-size-base a-color-price"})
+                price = str(price_span.text).replace("$", "")
+                price = price.replace(",", "")
                 return {"name":name,"price":float(price)}
             except Exception as e:
                 print(e.args)
                 print(f"[{datetime.now()}] Not able to parse price ({prod_url})")
                 return {"error":"Not able to parse"}
-        else:
-            print(f"[{datetime.now()}] Not available ({prod_url})")
-            return {"error":"Not available"}
-
     else:
         print(f"[{datetime.now()}] Error status code: {req.status_code} {prod_url}")
         return {"error":"Network error"}
@@ -81,8 +91,6 @@ def scrapeProdPage(prod_url: str, hdrs: dict)->dict:
 
 def main():
     print("This scripts is not supposed to be executed unless you wan't to try something outside the bot itself")
-    # scrapProdPage("https://www.amazon.com.mx/Sennheiser-Aud%C3%ADfonos-abiertos-estereof%C3%B3nicos-profesionales/dp/B00004SY4H")
-    # result = scrapWhishlistUrls("https://www.amazon.com.mx/hz/wishlist/ls/EB767EYMKQE5?ref_=wl_share")
     # print (result)
 
 

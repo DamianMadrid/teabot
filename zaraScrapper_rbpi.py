@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 
 
 
-BASE_URL ="https://www.liverpool.com.mx" 
+BASE_URL ="https://www.zara.com" 
 
 def searchKeyword(keyword: str):
     r = requests.get(

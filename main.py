@@ -5,14 +5,12 @@ from subprocess import check_output
 from scrapper import Scrapper
 from datetime import datetime
 import pickle
-import time
 import os
-
 
 config =dotenv_values('.env')
 TELEGRAM_TOKEN = config["TELEGRAM_TOKEN"]
 DATA_PATH = os.path.expanduser("~/YARAPT/data/")
-SUB_DATA_PATH = DATA_PATH+"subscriptions.csv"
+SUB_DATA_PATH = DATA_PATH+"subscriptions.pickle"
 updater = Updater(TELEGRAM_TOKEN)
 main_scrapper = Scrapper(DATA_PATH)
 dispatcher = updater.dispatcher
@@ -29,14 +27,14 @@ def loadSubList():
         active_subs = pickle.load(fp)
 
 def sendUpdate(context:CallbackContext)->None:
-    current_exec  = str(time.mktime(datetime.now().timetuple())).replace(".",":")
+    current_exec  = str(datetime.now().date())
     update_str = main_scrapper.updateSavedProd(current_exec)
     job = context.job
     if update_str:
         context.bot.send_message(job.context,update_str)
     update_str = main_scrapper.updateString(current_exec)
     if update_str:
-        context.bot.send_message(job.context,update_str)
+        context.bot.send_message(job.context,update_str,parse_mode="HTML")
     else:
         print(f"There was no update {datetime.now()}")
 
@@ -108,12 +106,9 @@ def _errorUpdate(update:Update, context:CallbackContext)->None:
     for sub in active_subs:
         updater.bot.sendMessage(sub,"An error ocurrend")
         updater.bot.sendMessage(sub,str(type(context.error)))
-        
-    
-    
 
 def main():
-    print("Bot startup")
+    print("Startup")
     loadSubList()
     _resumeSubscription()
     dispatcher.add_handler(CommandHandler("whereareyou", _whereAreYouCmmnd))
@@ -123,7 +118,6 @@ def main():
     dispatcher.add_handler(CommandHandler("checkwishlists", _checkWishlists))
     # dispatcher.add_error_handler(_errorUpdate)
     updater.start_polling()
-    print("Bot listening")
     updater.idle()
 
 if __name__ == '__main__':
