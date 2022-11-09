@@ -7,7 +7,7 @@ from requests import request, Session
 import amazonScrapper_rbpi as amazon
 import liverpoolScraper_rbpi as liverpool
 from enum import Enum
-
+REXP = r'\d{4}-\d{2}-\d{2}'
 
 class Domain(Enum):
     NONE = 0
@@ -71,7 +71,6 @@ class Scrapper:
         try:
             self.db_con.execute("DELETE FROM PRICES WHERE PROD_ID = ?",(id,))
             self.db_con.commit()
-            print()
             return True
         except Exception as e:
             print("Exception in remove prod")
@@ -130,21 +129,28 @@ class Scrapper:
         return(update_str)
 
     def pruneOldData(self,current_exec):
-        pass
+        #Get all columns
+        cols  = self.db_con.execute("select name from pragma_table_info('prices')").fetchall()
+        #Filter those that are dates
+        dates = list(filter(lambda _col : re.match(REXP, _col[0]),cols))
+        
+        dates = [datetime.strptime(x[0], '%Y-%m-%d') for x in dates]
+        #Filter 3 months old
+        limit_date = datetime.today() - timedelta(days=90)
+        dates = list(filter(lambda _date : _date < limit_date,dates))
+        cols = [(str(x.date()),) for x in dates]
+        #Delete old columns
+        for c in cols:
+            self.db_con.execute(f"alter table prices drop column [{c[0]}] ")
+        self.db_con.commit()
 
 
     def addDateColumn(self,current_exec:str):
         cols  = self.db_con.execute("select name from pragma_table_info('prices')").fetchall()
         cols = [c[0] for c in cols]
-        prune_Date=None
         if not current_exec in cols:
-            prune_Date = (datetime.now()-timedelta(90)).date()
+            self.pruneOldData(current_exec=current_exec)
             self.db_con.execute(f"alter table prices add column [{current_exec}];")
-        if prune_Date and prune_Date in cols:
-            try:
-                self.db_con.execute(f"alter table drop column [{prune_Date}];")
-            except Exception  :
-                pass
         return
 
     def updateSavedProd(self, current_exec:str):
@@ -203,7 +209,7 @@ class Scrapper:
                         # Bigger than 20%
                         if priceDelta > last_price * .2:
                             alert_message[url]["content"] += f"{'🟢' if is_disccout else '🔴'}"
-#            self.db_con.execute("UPDATE PRICES SET LAST_PRICE = ? WHERE PROD_ID = ?",(current_price,prod_id))
+                self.db_con.execute("UPDATE PRICES SET LAST_PRICE = ? WHERE PROD_ID = ?",(current_price,prod_id))
         final_message = ''
         for url, val in alert_message.items():
             if val["content"] != "":
@@ -215,14 +221,6 @@ def main():
     current_exec  = str(datetime.now().date())
     test_scrapper = Scrapper("./data/")
     update_message = test_scrapper.updateSavedProd(current_exec)
-    print(update_message)
-    
-    # files = {'f': ('err_.html', open('err_.html', 'rb'))}
-    # response = current_session.get("https://www.amazon.com.mx/dp/B016P9HJIA",files=files)
-    # response.raise_for_status() # ensure we notice bad responses
-    # with open("resp_text.txt", "w") as file:
-    #     file.write(response.text)
-    # print(res)
 
 
 if __name__ == "__main__":
