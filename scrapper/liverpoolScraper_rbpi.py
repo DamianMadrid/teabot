@@ -22,7 +22,7 @@ def searchKeyword(keyword: str):
 def scrapeProdPage(prod_url: str,curr_session:requests.Session)->dict:
     req = curr_session.get(prod_url)
     if req.status_code == 200:
-        soup = BeautifulSoup(req.text, "html.parser")
+        soup = BeautifulSoup(req.text, "lxml")
         script_json_data = soup.find("script", {"id": "__NEXT_DATA__"})
         json_data_str = str(script_json_data.string)
         prod_data = json.loads(json_data_str)

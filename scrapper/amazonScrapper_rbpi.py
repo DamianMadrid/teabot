@@ -1,42 +1,41 @@
-import requests
-import requests_random_user_agent
 import time
+from requests import Session
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from datetime import  datetime
 from bs4 import BeautifulSoup
 
 BASE_URL = "https://www.amazon.com.mx"
 
-def scrapWhishlistUrls(whishlist_url: str):
-    current_session = requests.session()
+def scrapWhishlistUrls(whishlist_url: str,driver:webdriver):
     urls = set()
-    failed_attempts_left = 10
-    while(True):
-        if failed_attempts_left == 0:
-            print(whishlist_url)
-            print(f"[{datetime.now()}] Error req/res")
-            return set()
-        if whishlist_url == None:
-            return urls
-        req = current_session.get(whishlist_url)
-        if req.status_code == 200:
-            soup = BeautifulSoup(req.text, "html.parser")
-            whishlist = soup.find(id="g-items")
-            if whishlist != None:
-                for prod in whishlist.find_all("li"):
+    try:
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "g-items"))
+        )
+        soup = BeautifulSoup(driver.page_source,"lxml")
+        whishlist = soup.find(id="g-items")
+        if whishlist != None:
+            for prod in whishlist.find_all("li"):
 
-                    left_panel = prod.find(
+                left_panel = prod.find(
+                    "div", {"class": "a-fixed-left-grid-inner"})
+                if left_panel:
+                    left_panel = left_panel.find(
                         "div", {"class": "a-fixed-left-grid-inner"})
-                    if left_panel:
-                        left_panel = left_panel.find(
-                            "div", {"class": "a-fixed-left-grid-inner"})
-                        prod_url = left_panel.find("a", {"class": "a-link-normal"})
-                        urls.add(prod_url['href'].split("&")[0])
-                whishlist_url = _nextWhishlistSegment(soup)
-            else:
-                failed_attempts_left -= 1
-        else:
-            failed_attempts_left -= 1
-        time.sleep(2)
+                    prod_url = left_panel.find("a", {"class": "a-link-normal"})
+                    urls.add(prod_url['href'].split("&")[0])
+            whishlist_url = _nextWhishlistSegment(soup)
+    except TimeoutException:
+        print(whishlist_url)
+        print(f"[{datetime.now()}] Error req/res")
+        return set()
+    # finally:
+    #     driver.quit()
 
 def _nextWhishlistSegment(soup:BeautifulSoup):
     eol = soup.find("div",{"id":"endOfListMarker"})
@@ -48,17 +47,14 @@ def _nextWhishlistSegment(soup:BeautifulSoup):
         else:
             print(f"[{datetime.now()}] Couldnt find next segment of whishlist")
 
-def scrapeProdPage(prod_url: str,session:requests.Session)->dict:
-    req = session.get(prod_url)
-    err_out = open("err_.html","wb")
-    err_out.write(req.content)
-
-    if req.status_code == 200:
-        soup = BeautifulSoup(req.text, "html.parser")
+def scrapeProdPage(prod_url: str,driver:webdriver,session:Session)->dict:
+    driver.get(prod_url)
+    try:
+        WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.ID, "productTitle"))
+        )
+        soup = BeautifulSoup(driver.page_source,"lxml")
         name_span = soup.find("span", {"id": "productTitle"})
-        if not name_span:
-            print(f"[{datetime.now()}] Expired link ({prod_url})")
-            return {"error":"Expired link"}
         name = str(name_span.text).strip()
         price_box = soup.find("div", {"class": "a-box-group"})
         if price_box:
@@ -84,14 +80,13 @@ def scrapeProdPage(prod_url: str,session:requests.Session)->dict:
                 print(e.args)
                 print(f"[{datetime.now()}] Not able to parse price ({prod_url})")
                 return {"error":"Not able to parse"}
-    else:
-        print(f"[{datetime.now()}] Error status code: {req.status_code} {prod_url}")
+    except TimeoutException:
+        print(f"[{datetime.now()}] Couldn't find productTitle {prod_url}")
         return {"error":"Network error"}
 
 
 def main():
     print("This scripts is not supposed to be executed unless you wan't to try something outside the bot itself")
-    # print (result)
 
 
 if __name__ == "__main__":
