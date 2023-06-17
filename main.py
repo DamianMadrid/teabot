@@ -14,11 +14,13 @@ application = Application.builder().token(TELEGRAM_TOKEN).build()
 main_scrapper = Scrapper(DATA_PATH)
 
 async def _sendUpdate(context:ContextTypes.DEFAULT_TYPE)->None:
-    update_str = main_scrapper.updateSavedProd(str(datetime.now().date()))
     job = context.job
+    main_scrapper.updateSavedProd(str(datetime.now().date()))
+    update_str = main_scrapper.updateString(str(datetime.now().date()))
     if update_str:
         await context.bot.send_message(job.chat_id,update_str,parse_mode="HTML")
     else:
+#        await context.bot.send_message(job.chat_id,f"No update {str(datetime.now().date())}",parse_mode="HTML")
         print(f"There was no update {datetime.now()}")
 
 async def _forceUpdate(update:Update, context:ContextTypes.DEFAULT_TYPE)->None:
@@ -85,8 +87,9 @@ def main():
     application.add_handler(CommandHandler("update", _forceUpdate))
     # application.add_handler(CommandHandler("addprod", _addProd))
     # application.add_handler(CommandHandler("removeprod", _removeProd))
-    # application.add_handler(CommandHandler("checkwishlists", _checkWishlists))
+    application.add_handler(CommandHandler("checkwishlists", _checkWishlists))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _general))
+    print("Application started succesfully");
     application.run_polling()
 
 if __name__ == '__main__':

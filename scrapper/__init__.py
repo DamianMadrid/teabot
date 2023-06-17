@@ -3,11 +3,9 @@ import sqlite3
 import re
 from datetime import datetime, timedelta
 from typing import Optional
-from selenium import webdriver
 from requests import Session
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+from selenium import webdriver
+from selenium.webdriver import FirefoxOptions as Options
 import scrapper.amazonScrapper_rbpi as amazon
 import scrapper.liverpoolScraper_rbpi as liverpool
 from enum import Enum
@@ -30,17 +28,15 @@ class Scrapper:
         self.wldb = sqlite3.connect(
             data_path+"/wl.db", check_same_thread=False)
         self.driver_opt = Options()
-        self.driver_opt.add_argument("--headless")
-        self.chrome_service = Service(ChromeDriverManager().install())
+        self.driver_opt.add_argument("--headless") 
         self._renewSession()
         pass
 
     def _renewSession(self) -> None:
         self.session = Session()
         self.session.headers.update(
-            {"accept-language": "en-US,en;q=0.9,ja-JP;q=0.8,ja;q=0.7,es-419;q=0.6,es;q=0.5"})
-        self.driver = webdriver.Chrome(
-            service=self.chrome_service, options=self.driver_opt)
+            {"accept-language": "en-US,en;q=0.9,ja-JP;q=0.8,ja;q=0.7,es-419;q=0.6,es;q=0.5"}) 
+        self.driver = webdriver.Firefox(options= self.driver_opt)
         self.driver.get(amazon.BASE_URL)
         return
 
@@ -111,23 +107,27 @@ class Scrapper:
     def checkWishList(self) -> str:
         saved_urls = set([row for row, in self.db_con.execute(
             "select url from prices").fetchall()])
+        print("saved urls: ",saved_urls)
         new_prods = set()
         for wl_url, in self.wldb.execute("select url from wishlists").fetchall():
-            urls_from_wl = amazon.scrapWhishlistUrls(amazon.BASE_URL + wl_url)
+            print("WL", wl_url)
+            urls_from_wl = amazon.scrapWhishlistUrls(amazon.BASE_URL + wl_url,self.driver)
             for url in urls_from_wl:
                 url = self._stripURL(url, Domain.AMAZON_MX)
+                print("url",url,end= "")
                 if url in saved_urls:
                     saved_urls.remove(url)
+                    print()
                 else:
                     new_prods.add(url)
-                    self.addProd(url, domain=Domain.AMAZON_MX,
-                                 fromwl=int(True))
+                    print("new!")
+                    self.addProd(url, domain=Domain.AMAZON_MX,fromwl=int(True))
         # Wich products are added to the df if any
         update_str = ""
         if len(new_prods):
             update_str += "📥 The next items have been added \n"
             for new_p in new_prods:
-                update_str += f"\t{new_p} \n"
+                update_str += f"\t{new_p}\n"
         # See which products from wishlist should be removed
         removed_url = set()
         for unseen_url in saved_urls:

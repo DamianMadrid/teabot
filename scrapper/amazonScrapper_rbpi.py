@@ -3,7 +3,6 @@ from requests import Session
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
-
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from datetime import  datetime
@@ -14,6 +13,7 @@ BASE_URL = "https://www.amazon.com.mx"
 def scrapWhishlistUrls(whishlist_url: str,driver:webdriver):
     urls = set()
     try:
+        driver.get(whishlist_url)
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.ID, "g-items"))
         )
@@ -21,7 +21,6 @@ def scrapWhishlistUrls(whishlist_url: str,driver:webdriver):
         whishlist = soup.find(id="g-items")
         if whishlist != None:
             for prod in whishlist.find_all("li"):
-
                 left_panel = prod.find(
                     "div", {"class": "a-fixed-left-grid-inner"})
                 if left_panel:
@@ -30,12 +29,11 @@ def scrapWhishlistUrls(whishlist_url: str,driver:webdriver):
                     prod_url = left_panel.find("a", {"class": "a-link-normal"})
                     urls.add(prod_url['href'].split("&")[0])
             whishlist_url = _nextWhishlistSegment(soup)
+        return urls
     except TimeoutException:
         print(whishlist_url)
         print(f"[{datetime.now()}] Error req/res")
         return set()
-    # finally:
-    #     driver.quit()
 
 def _nextWhishlistSegment(soup:BeautifulSoup):
     eol = soup.find("div",{"id":"endOfListMarker"})
