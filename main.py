@@ -3,6 +3,7 @@ from telegram.ext import (Application,CommandHandler,ContextTypes,CallbackContex
 from dotenv import dotenv_values
 from subprocess import check_output
 from scrapper import Scrapper
+import pickle
 import pendulum
 import os
 
@@ -10,18 +11,15 @@ TELEGRAM_TOKEN = dotenv_values('.env')["TELEGRAM_TOKEN"]
 DATA_DIRECTORY = os.path.expanduser("./data/")
 
 class ScrapperApp:
-
     async def _scheduledUpdate(self,context:ContextTypes.DEFAULT_TYPE)->None:
         job = context.job
-        
         current_date= str(pendulum.now().date())
         self.scrapper.updateSavedProd(current_date)
         update_str = self.scrapper.updateString(current_date)
         if update_str:
-            print("sending update string: ",update_str)
             await context.bot.send_message(job.chat_id,update_str,parse_mode="HTML")
         else:
-            print(f"There was no update {pendulum.now()}")
+            print(f"There was no update {pendulum.now().format('dddd DD MM YYYY')}")
 
     async def _getIP(self,update:Update, context:ContextTypes.DEFAULT_TYPE)->None:
         ip_addr = check_output("curl -s ifconfig.me" ,shell=True)
@@ -39,7 +37,11 @@ class ScrapperApp:
             await update.message.reply_text("You're already subscribed")
             return 
         _chat_id = str(update.message.chat_id)
-        context.job_queue.run_repeating(self._scheduledUpdate,first=0,interval=3600,name=_chat_id)    
+        self.subscriptions +=[_chat_id]
+        print(self.subscriptions)
+        with open(f"{DATA_DIRECTORY}subscriptions.pckl","+wb") as subs_pickle_file:
+            pickle.dump(self.subscriptions,subs_pickle_file)
+        context.job_queue.run_repeating(self._scheduledUpdate,first=1,interval=3600,name=_chat_id,chat_id=_chat_id)    
         await update.message.reply_text("Succesfully subscribed")
 
     async def _nextUpdate(self,update:Update, context:ContextTypes.DEFAULT_TYPE)->None:
@@ -65,25 +67,16 @@ class ScrapperApp:
         add_result = self.scrapper.addProd(prodURL)
         await update.message.reply_text("Product Added succesfully" if add_result else "Failed to add")
         return
-        
-
-    def _getPersistance(self,data_directory:str):
-        if not os.path.exists(f"{data_directory}persistance.pckl"):
-            print("No persistance found")
-            return None
-        return PicklePersistence(filepath=f"{data_directory}persistance.pckl")
     
     def _initTelegramApp(self):
-        _persistence = self._getPersistance(DATA_DIRECTORY)
-        self.telegramApp = Application.builder().token(TELEGRAM_TOKEN)
-        if _persistence is None:
-            self.telegramApp = self.telegramApp.persistence(_persistence)
-        self.telegramApp = self.telegramApp.build()
+        _persistence = PicklePersistence(filepath=f"{DATA_DIRECTORY}persistence.pckl")
+        self.telegramApp = Application.builder().token(TELEGRAM_TOKEN).persistence(_persistence).build()
         self.telegramApp.add_handler(CommandHandler("get_ip", self._getIP))
         self.telegramApp.add_handler(CommandHandler("next_update", self._nextUpdate))
         self.telegramApp.add_handler(CommandHandler("subscribe", self._subscribe))
         self.telegramApp.add_handler(CommandHandler("add", self._addProduct))
         self.telegramApp.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._defaultHandler))
+        self._restoreSubscriptions()
         self.telegramApp.run_polling()
         return
 
@@ -91,9 +84,26 @@ class ScrapperApp:
         self.scrapper = Scrapper(DATA_DIRECTORY)
         return
         
+    def _getSubscriptions(self,data_directory)->None:
+        if not os.path.exists(f"{data_directory}subscriptions.pckl"):    
+            self.subscriptions = []
+            return
+        with open(f"{data_directory}subscriptions.pckl","rb") as subs_pickle_file:
+            self.subscriptions = pickle.load(subs_pickle_file)    
+
+    def _restoreSubscriptions(self)->None:
+        self._getSubscriptions(DATA_DIRECTORY)
+        for _chat_id in self.subscriptions:
+            self.telegramApp.job_queue.run_repeating(self._scheduledUpdate,first=1,interval=3600,name=_chat_id,chat_id=_chat_id)
+        
+
+        
+
     def __init__(self):    
         self._initScrapper()
+        
         self._initTelegramApp()
+
 
         
 
