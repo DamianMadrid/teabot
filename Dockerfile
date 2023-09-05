@@ -2,7 +2,11 @@
 FROM balenalib/aarch64-ubuntu:latest
 # download requires apt dependencies
 RUN apt-get update -y
-RUN apt-get -y install curl gnupg python3.11 python3-pip software-properties-common
+RUN apt-get -y install curl gnupg python3.11 python3-pip software-properties-common 
+# install timezone requirements
+ARG DEBIAN_FRONTEND=noninteractive
+ENV TZ="America/Mexico_City"
+RUN apt-get -y install tzdata
 # add firefox repository and add priority and install
 RUN  add-apt-repository ppa:mozillateam/ppa -y
 RUN echo "Package: *\n\
